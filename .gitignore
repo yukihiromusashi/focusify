@@ -84,3 +84,13 @@ coverage/
 *.pid
 *.seed
 *.pid.lock
+
+# Design files
+*.jpg
+*.jpeg
+*.png
+*.gif
+*.psd
+*.sketch
+*.fig
+*.xd
