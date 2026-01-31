@@ -25,7 +25,7 @@
                     <path
                         :d="
                             (() => {
-                                const minutes = remainingTime / 60;
+                                const minutes = Math.ceil(remainingTime / 60);
                                 const angle = (minutes / 60) * 360;
                                 const radians = (angle - 90) * Math.PI / 180;
                                 const x = Math.cos(radians) * 112;
@@ -50,7 +50,7 @@
                     <!-- Clock Hand (Needle) - extends beyond the circle -->
                     <div 
                         class="absolute bottom-1/2 left-1/2 w-2.5 rounded-full pointer-events-none"
-                        :class="isDragging ? '' : 'transition-transform duration-1000'"
+                        :class="isDragging ? '' : 'transition-transform duration-300'"
                         :style="`height: 120px; background-color: ${currentColor.dark}; transform: translateX(-50%) rotate(${needleAngle}deg); transform-origin: bottom center;`"
                     ></div>
                     <!-- Center Circle -->
@@ -323,8 +323,8 @@ function timerApp() {
             if (this.timerState === 'stopped' && this.dragAngle !== 0) {
                 return this.dragAngle;
             }
-            // Convert remaining time to angle: minutes to degrees
-            const minutes = this.remainingTime / 60;
+            // Convert remaining time to angle: round up to whole minutes for consistency with ticks
+            const minutes = Math.ceil(this.remainingTime / 60);
             return (minutes / 60) * 360;
         },
         
@@ -386,17 +386,17 @@ function timerApp() {
             let angle = Math.atan2(deltaX, -deltaY) * (180 / Math.PI);
             if (angle < 0) angle += 360;
             
+            // Snap to 6-degree increments (60 minutes = 360 degrees, so 6 degrees per minute)
+            const degreesPerMinute = 6;
+            angle = Math.round(angle / degreesPerMinute) * degreesPerMinute;
+            
             this.dragAngle = angle;
             
             // Convert angle to minutes (0-60 minutes for full rotation)
-            // 0° = 0 minutes, 90° = 15 minutes, 180° = 30 minutes, etc.
-            const minutes = (angle / 360) * 60;
-            
-            // Round to nearest whole minute for better UX
-            const roundedMinutes = Math.round(minutes);
+            const minutes = Math.round((angle / 360) * 60);
             
             // Convert minutes to seconds and set remaining time
-            this.remainingTime = roundedMinutes * 60;
+            this.remainingTime = minutes * 60;
             
             // Update total time to match (so progress bar works correctly)
             if (this.remainingTime > this.totalTime) {
@@ -442,6 +442,7 @@ function timerApp() {
             }
             this.remainingTime = this.durations[this.timerMode];
             this.totalTime = this.durations[this.timerMode];
+            this.dragAngle = 0;
             this.updateTickColors();
         },
         
