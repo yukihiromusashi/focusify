@@ -1,0 +1,12 @@
+{
+  "name": "focusify-frontend",
+  "version": "1.0.0",
+  "description": "Frontend build tooling for hybrid app",
+  "scripts": {
+    "build:css": "tailwindcss -i ./src/input.css -o ./dist/styles.css --minify",
+    "watch:css": "tailwindcss -i ./src/input.css -o ../internal/templates/static/styles.css --watch"
+  },
+  "devDependencies": {
+    "tailwindcss": "^3.4.0"
+  }
+}

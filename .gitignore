@@ -1,0 +1,86 @@
+# Binaries
+bin/
+tmp/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+server
+desktop
+
+# Go
+vendor/
+*.test
+*.out
+coverage.txt
+*.prof
+
+# Database
+*.db
+*.db-shm
+*.db-wal
+
+# Frontend
+node_modules/
+frontend/dist/
+package-lock.json
+
+# Wails
+build/
+wails_*_*_amd64
+wails_*_*_arm64
+*.app/
+*.dmg
+*.msi
+*.deb
+*.rpm
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+*.iml
+.project
+.classpath
+.settings/
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+Desktop.ini
+
+# Logs
+*.log
+build-errors.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+logs/
+
+# Environment
+.env
+.env.local
+.env.*.local
+*.pem
+
+# Testing
+coverage/
+.nyc_output/
+*.cover
+
+# Temporary files
+*.tmp
+*.bak
+*.swp
+*~.nib
+*.pid
+*.seed
+*.pid.lock
