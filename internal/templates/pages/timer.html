@@ -1,0 +1,528 @@
+{{define "content"}}
+<div class="min-h-screen bg-gray-200 flex items-center justify-center py-8">
+    <div class="timer-container text-center max-w-md mx-auto px-4" x-data="timerApp()">
+        <!-- Timer Title -->
+        <h1 class="text-3xl md:text-4xl font-bold text-slate-700 mb-8">Timer</h1>
+        
+        <!-- Circular Timer Display -->
+        <div class="relative w-72 h-72 mx-auto mb-8" x-init="renderTickMarks()">
+            <!-- SVG for tick marks and progress -->
+            <svg class="absolute inset-0 w-full h-full" viewBox="0 0 288 288" x-ref="clockSvg">
+                <!-- Tick marks will be inserted here by JavaScript -->
+                <g id="tickMarks"></g>
+                
+                <!-- Inner clock body circle (gray background) -->
+                <g transform="translate(144, 144)">
+                    <circle
+                        r="112"
+                        fill="#CBD5E1"
+                    />
+                </g>
+                
+                <!-- Progress fill (pie chart style) - renders on top -->
+                <g transform="translate(144, 144)">
+                    <!-- Active zone pie slice (themed color) -->
+                    <path
+                        :d="
+                            (() => {
+                                const minutes = remainingTime / 60;
+                                const angle = (minutes / 60) * 360;
+                                const radians = (angle - 90) * Math.PI / 180;
+                                const x = Math.cos(radians) * 112;
+                                const y = Math.sin(radians) * 112;
+                                const largeArc = angle > 180 ? 1 : 0;
+                                return angle === 0 ? '' : `M 0,0 L 0,-112 A 112,112 0 ${largeArc},1 ${x},${y} Z`;
+                            })()
+                        "
+                        :fill="currentColor.main"
+                    />
+                </g>
+            </svg>
+            
+            <!-- Inner Circle with Clock Hand (transparent overlay for interactions) -->
+            <div class="absolute inset-0 flex items-center justify-center pointer-events-none">
+                <div 
+                    class="relative w-56 h-56 rounded-full flex items-center justify-center cursor-pointer pointer-events-auto"
+                    @mousedown="startDrag"
+                    @touchstart="startDrag"
+                    x-ref="clockCircle"
+                >
+                    <!-- Clock Hand (Needle) - extends beyond the circle -->
+                    <div 
+                        class="absolute bottom-1/2 left-1/2 w-2.5 rounded-full pointer-events-none"
+                        :class="isDragging ? '' : 'transition-transform duration-1000'"
+                        :style="`height: 120px; background-color: ${currentColor.dark}; transform: translateX(-50%) rotate(${needleAngle}deg); transform-origin: bottom center;`"
+                    ></div>
+                    <!-- Center Circle -->
+                    <div class="absolute w-10 h-10 bg-white rounded-full shadow-md z-10 pointer-events-none"></div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Time Display -->
+        <div class="text-3xl font-bold text-slate-700 mb-4" x-text="displayTime"></div>
+        
+        <!-- Status Text -->
+        <div class="text-xl font-semibold text-slate-600 mb-8" x-text="statusText"></div>
+        
+        <!-- Control Buttons -->
+        <div class="flex items-center justify-center gap-4">
+            <!-- Start/Play Button (when stopped) -->
+            <template x-if="timerState === 'stopped'">
+                <button 
+                    @click="startTimer()"
+                    class="w-16 h-16 rounded-full flex items-center justify-center shadow-lg transition-all duration-200"
+                    :style="`background-color: ${currentColor.button}; &:hover { background-color: ${currentColor.buttonHover}; }`"
+                    @mouseenter="$el.style.backgroundColor = currentColor.buttonHover"
+                    @mouseleave="$el.style.backgroundColor = currentColor.button"
+                >
+                    <svg class="w-6 h-6 text-white ml-0.5" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M8 5v14l11-7z"/>
+                    </svg>
+                </button>
+            </template>
+            
+            <!-- Play/Pause/Stop/Reset Buttons (when running or paused) -->
+            <template x-if="timerState === 'running' || timerState === 'paused'">
+                <div class="flex items-center justify-center gap-4">
+                    <!-- Play/Pause Button -->
+                    <button 
+                        @click="togglePauseResume()"
+                        class="w-14 h-14 rounded-full flex items-center justify-center shadow-lg transition-all duration-200"
+                        :style="`background-color: ${currentColor.button}; &:hover { background-color: ${currentColor.buttonHover}; }`"
+                        @mouseenter="$el.style.backgroundColor = currentColor.buttonHover"
+                        @mouseleave="$el.style.backgroundColor = currentColor.button"
+                    >
+                        <!-- Pause Icon -->
+                        <template x-if="timerState === 'running'">
+                            <svg class="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 24 24">
+                                <path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z"/>
+                            </svg>
+                        </template>
+                        <!-- Play Icon -->
+                        <template x-if="timerState === 'paused'">
+                            <svg class="w-5 h-5 text-white ml-0.5" fill="currentColor" viewBox="0 0 24 24">
+                                <path d="M8 5v14l11-7z"/>
+                            </svg>
+                        </template>
+                    </button>
+                    
+                    <!-- Stop Button -->
+                    <button 
+                        @click="showStopDialog = true"
+                        class="w-16 h-16 rounded-full flex items-center justify-center shadow-lg transition-all duration-200"
+                        :style="`background-color: ${currentColor.button}; &:hover { background-color: ${currentColor.buttonHover}; }`"
+                        @mouseenter="$el.style.backgroundColor = currentColor.buttonHover"
+                        @mouseleave="$el.style.backgroundColor = currentColor.button"
+                    >
+                        <svg class="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 24 24">
+                            <rect x="6" y="6" width="12" height="12" rx="2"/>
+                        </svg>
+                    </button>
+                    
+                    <!-- Reset Button -->
+                    <button 
+                        @click="showRestartDialog = true"
+                        class="w-14 h-14 rounded-full flex items-center justify-center shadow-lg transition-all duration-200"
+                        :style="`background-color: ${currentColor.button}; &:hover { background-color: ${currentColor.buttonHover}; }`"
+                        @mouseenter="$el.style.backgroundColor = currentColor.buttonHover"
+                        @mouseleave="$el.style.backgroundColor = currentColor.button"
+                    >
+                        <svg class="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46C19.54 15.03 20 13.57 20 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74C4.46 8.97 4 10.43 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z"/>
+                        </svg>
+                    </button>
+                </div>
+            </template>
+        </div>
+        
+        <!-- Color Theme Picker -->
+        <div class="mt-8 flex items-center justify-center gap-3">
+            <button @click="themeColor = 'green'" :class="themeColor === 'green' ? 'ring-2 ring-offset-2 ring-slate-700' : ''" class="w-8 h-8 rounded-full bg-green-500 hover:scale-110 transition-transform shadow-md"></button>
+            <button @click="themeColor = 'blue'" :class="themeColor === 'blue' ? 'ring-2 ring-offset-2 ring-slate-700' : ''" class="w-8 h-8 rounded-full bg-blue-500 hover:scale-110 transition-transform shadow-md"></button>
+            <button @click="themeColor = 'purple'" :class="themeColor === 'purple' ? 'ring-2 ring-offset-2 ring-slate-700' : ''" class="w-8 h-8 rounded-full bg-purple-500 hover:scale-110 transition-transform shadow-md"></button>
+            <button @click="themeColor = 'pink'" :class="themeColor === 'pink' ? 'ring-2 ring-offset-2 ring-slate-700' : ''" class="w-8 h-8 rounded-full bg-pink-500 hover:scale-110 transition-transform shadow-md"></button>
+            <button @click="themeColor = 'red'" :class="themeColor === 'red' ? 'ring-2 ring-offset-2 ring-slate-700' : ''" class="w-8 h-8 rounded-full bg-red-500 hover:scale-110 transition-transform shadow-md"></button>
+            <button @click="themeColor = 'orange'" :class="themeColor === 'orange' ? 'ring-2 ring-offset-2 ring-slate-700' : ''" class="w-8 h-8 rounded-full bg-orange-500 hover:scale-110 transition-transform shadow-md"></button>
+            <button @click="themeColor = 'yellow'" :class="themeColor === 'yellow' ? 'ring-2 ring-offset-2 ring-slate-700' : ''" class="w-8 h-8 rounded-full bg-yellow-500 hover:scale-110 transition-transform shadow-md"></button>
+            <button @click="themeColor = 'teal'" :class="themeColor === 'teal' ? 'ring-2 ring-offset-2 ring-slate-700' : ''" class="w-8 h-8 rounded-full bg-teal-500 hover:scale-110 transition-transform shadow-md"></button>
+            <button @click="themeColor = 'cyan'" :class="themeColor === 'cyan' ? 'ring-2 ring-offset-2 ring-slate-700' : ''" class="w-8 h-8 rounded-full bg-cyan-500 hover:scale-110 transition-transform shadow-md"></button>
+        </div>
+        
+        <!-- Stop Timer Dialog -->
+        <div 
+            x-show="showStopDialog"
+            class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+            @click.self="showStopDialog = false"
+        >
+            <div class="bg-white rounded-2xl p-8 max-w-md w-full mx-4 shadow-2xl">
+                <h2 class="text-2xl font-bold text-slate-800 mb-3 text-center">Stop Timer?</h2>
+                <p class="text-slate-600 text-base mb-6 text-center">Stopping timer will reset timer to 25 minutes and make the timer inactive</p>
+                
+                <div class="space-y-3">
+                    <button 
+                        @click="confirmStopTimer()"
+                        class="w-full py-4 bg-slate-700 hover:bg-slate-800 text-white text-lg font-semibold rounded-xl transition-all duration-200 hover:scale-105"
+                    >
+                        Stop Timer
+                    </button>
+                    <button 
+                        @click="showStopDialog = false"
+                        class="w-full py-4 bg-slate-100 hover:bg-slate-200 text-slate-700 text-lg font-semibold rounded-xl transition-all duration-200"
+                    >
+                        Cancel
+                    </button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Restart Dialog -->
+        <div 
+            x-show="showRestartDialog"
+            class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+            @click.self="showRestartDialog = false"
+        >
+            <div class="bg-white rounded-2xl p-8 max-w-md w-full mx-4 shadow-2xl">
+                <h2 class="text-2xl font-bold text-slate-800 mb-3 text-center">Restart timer?</h2>
+                <p class="text-slate-600 text-base mb-6 text-center">Stop current pomodoro and start a new session?</p>
+                
+                <div class="space-y-3">
+                    <button 
+                        @click="stopAndStart('focusing')"
+                        class="w-full py-4 bg-slate-700 hover:bg-slate-800 text-white text-lg font-semibold rounded-xl transition-all duration-200 hover:scale-105"
+                    >
+                        Start Focusing
+                    </button>
+                    <button 
+                        @click="stopAndStart('shortBreak')"
+                        class="w-full py-4 bg-slate-100 hover:bg-slate-200 text-slate-700 text-lg font-semibold rounded-xl transition-all duration-200"
+                    >
+                        Start Short Break
+                    </button>
+                    <button 
+                        @click="stopAndStart('longBreak')"
+                        class="w-full py-4 bg-slate-100 hover:bg-slate-200 text-slate-700 text-lg font-semibold rounded-xl transition-all duration-200"
+                    >
+                        Start Long Break
+                    </button>
+                    <button 
+                        @click="showRestartDialog = false"
+                        class="w-full py-4 bg-slate-100 hover:bg-slate-200 text-slate-700 text-lg font-semibold rounded-xl transition-all duration-200"
+                    >
+                        Close
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function timerApp() {
+    return {
+        // Timer settings (in seconds)
+        durations: {
+            focusing: 25 * 60,    // 25 minutes
+            shortBreak: 5 * 60,   // 5 minutes
+            longBreak: 15 * 60    // 15 minutes
+        },
+        
+        // Current state
+        timerState: 'stopped',  // 'stopped', 'running', 'paused'
+        timerMode: 'focusing',   // 'focusing', 'shortBreak', 'longBreak'
+        remainingTime: 25 * 60,  // in seconds
+        totalTime: 25 * 60,
+        intervalId: null,
+        showRestartDialog: false,
+        showStopDialog: false,
+        
+        // Drag state
+        isDragging: false,
+        dragAngle: 0,
+        tickLines: [], // Store references to tick mark elements
+        themeColor: 'green', // Current theme color
+        
+        // Color palette mapping
+        colorMap: {
+            green: { main: '#10B981', dark: '#166534', button: '#10B981', buttonHover: '#059669' },
+            blue: { main: '#3B82F6', dark: '#1E40AF', button: '#3B82F6', buttonHover: '#2563EB' },
+            purple: { main: '#A855F7', dark: '#6B21A8', button: '#A855F7', buttonHover: '#9333EA' },
+            pink: { main: '#EC4899', dark: '#BE185D', button: '#EC4899', buttonHover: '#DB2777' },
+            red: { main: '#EF4444', dark: '#B91C1C', button: '#EF4444', buttonHover: '#DC2626' },
+            orange: { main: '#F97316', dark: '#C2410C', button: '#F97316', buttonHover: '#EA580C' },
+            yellow: { main: '#EAB308', dark: '#A16207', button: '#EAB308', buttonHover: '#CA8A04' },
+            teal: { main: '#14B8A6', dark: '#0F766E', button: '#14B8A6', buttonHover: '#0D9488' },
+            cyan: { main: '#06B6D4', dark: '#0E7490', button: '#06B6D4', buttonHover: '#0891B2' }
+        },
+        
+        // Get current theme colors
+        get currentColor() {
+            return this.colorMap[this.themeColor];
+        },
+        
+        // Method to render tick marks
+        renderTickMarks() {
+            const tickMarksGroup = document.getElementById('tickMarks');
+            if (!tickMarksGroup) return;
+            
+            this.tickLines = [];
+            
+            for (let i = 0; i < 60; i++) {
+                const angle = (i * 6 - 90) * Math.PI / 180;
+                const isHourMark = i % 5 === 0;
+                const innerRadius = 125;
+                const outerRadius = isHourMark ? 138 : 135;
+                
+                const x1 = 144 + Math.cos(angle) * innerRadius;
+                const y1 = 144 + Math.sin(angle) * innerRadius;
+                const x2 = 144 + Math.cos(angle) * outerRadius;
+                const y2 = 144 + Math.sin(angle) * outerRadius;
+                
+                const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                line.setAttribute('x1', x1);
+                line.setAttribute('y1', y1);
+                line.setAttribute('x2', x2);
+                line.setAttribute('y2', y2);
+                line.setAttribute('stroke', '#CBD5E1');
+                line.setAttribute('stroke-width', isHourMark ? '5' : '3.5'); // Bolder lines
+                line.setAttribute('stroke-linecap', 'round');
+                line.dataset.minute = i; // Store minute position (0 = 12 o'clock)
+                
+                this.tickLines.push(line);
+                tickMarksGroup.appendChild(line);
+            }
+            
+            // Initial color update
+            this.updateTickColors();
+        },
+        
+        // Update tick colors based on remaining time
+        updateTickColors() {
+            const activeMinutes = Math.ceil(this.remainingTime / 60);
+            
+            this.tickLines.forEach(line => {
+                const tickMinute = parseInt(line.dataset.minute);
+                // Tick 0 is at 12 o'clock, ticks 1-59 go clockwise
+                // If tick position is within or at the active time position, color it
+                if (tickMinute <= activeMinutes) {
+                    line.setAttribute('stroke', this.currentColor.main);
+                } else {
+                    line.setAttribute('stroke', '#CBD5E1'); // Visible gray for inactive zone
+                }
+            });
+        },
+        
+        // Computed properties
+        get progress() {
+            return ((this.totalTime - this.remainingTime) / this.totalTime) * 100;
+        },
+        
+        get needleAngle() {
+            // When stopped and dragging, use the drag angle
+            // Otherwise calculate angle from remaining time (60 minutes = 360 degrees)
+            if (this.timerState === 'stopped' && this.dragAngle !== 0) {
+                return this.dragAngle;
+            }
+            // Convert remaining time to angle: minutes to degrees
+            const minutes = this.remainingTime / 60;
+            return (minutes / 60) * 360;
+        },
+        
+        get displayTime() {
+            const minutes = Math.floor(this.remainingTime / 60);
+            const seconds = this.remainingTime % 60;
+            return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+        },
+        
+        get statusText() {
+            if (this.timerState === 'stopped') {
+                return 'Stopped';
+            } else if (this.timerState === 'running') {
+                return 'Focusing';
+            } else {
+                return 'Paused';
+            }
+        },
+        
+        // Drag methods
+        startDrag(event) {
+            if (this.timerState !== 'stopped') return; // Only allow drag when stopped
+            
+            this.isDragging = true;
+            
+            const moveHandler = (e) => this.onDrag(e);
+            const endHandler = () => {
+                this.isDragging = false;
+                document.removeEventListener('mousemove', moveHandler);
+                document.removeEventListener('mouseup', endHandler);
+                document.removeEventListener('touchmove', moveHandler);
+                document.removeEventListener('touchend', endHandler);
+            };
+            
+            document.addEventListener('mousemove', moveHandler);
+            document.addEventListener('mouseup', endHandler);
+            document.addEventListener('touchmove', moveHandler);
+            document.addEventListener('touchend', endHandler);
+            
+            // Initial drag position
+            this.onDrag(event);
+            
+            event.preventDefault();
+        },
+        
+        onDrag(event) {
+            if (!this.isDragging) return;
+            
+            const touch = event.touches ? event.touches[0] : event;
+            const clockElement = this.$refs.clockCircle;
+            const rect = clockElement.getBoundingClientRect();
+            const centerX = rect.left + rect.width / 2;
+            const centerY = rect.top + rect.height / 2;
+            
+            const deltaX = touch.clientX - centerX;
+            const deltaY = touch.clientY - centerY;
+            
+            // Calculate angle in degrees (0 = top, clockwise)
+            let angle = Math.atan2(deltaX, -deltaY) * (180 / Math.PI);
+            if (angle < 0) angle += 360;
+            
+            this.dragAngle = angle;
+            
+            // Convert angle to minutes (0-60 minutes for full rotation)
+            // 0° = 0 minutes, 90° = 15 minutes, 180° = 30 minutes, etc.
+            const minutes = (angle / 360) * 60;
+            
+            // Round to nearest whole minute for better UX
+            const roundedMinutes = Math.round(minutes);
+            
+            // Convert minutes to seconds and set remaining time
+            this.remainingTime = roundedMinutes * 60;
+            
+            // Update total time to match (so progress bar works correctly)
+            if (this.remainingTime > this.totalTime) {
+                this.totalTime = this.remainingTime;
+            }
+            
+            // Update tick colors to reflect new active zone
+            this.updateTickColors();
+        },
+        
+        // Methods
+        startTimer() {
+            this.timerState = 'running';
+            this.startCountdown();
+        },
+        
+        togglePauseResume() {
+            if (this.timerState === 'running') {
+                this.pauseTimer();
+            } else if (this.timerState === 'paused') {
+                this.resumeTimer();
+            }
+        },
+        
+        pauseTimer() {
+            this.timerState = 'paused';
+            if (this.intervalId) {
+                clearInterval(this.intervalId);
+                this.intervalId = null;
+            }
+        },
+        
+        resumeTimer() {
+            this.timerState = 'running';
+            this.startCountdown();
+        },
+        
+        stopTimer() {
+            this.timerState = 'stopped';
+            if (this.intervalId) {
+                clearInterval(this.intervalId);
+                this.intervalId = null;
+            }
+            this.remainingTime = this.durations[this.timerMode];
+            this.totalTime = this.durations[this.timerMode];
+            this.updateTickColors();
+        },
+        
+        resetTimer() {
+            if (this.intervalId) {
+                clearInterval(this.intervalId);
+                this.intervalId = null;
+            }
+            this.remainingTime = this.durations[this.timerMode];
+            this.totalTime = this.durations[this.timerMode];
+            // Keep the current state (running/paused) and restart countdown if it was running
+            if (this.timerState === 'running') {
+                this.startCountdown();
+            }
+        },
+        
+        confirmStopTimer() {
+            this.showStopDialog = false;
+            this.stopTimer();
+        },
+        
+        stopAndStart(mode) {
+            this.showRestartDialog = false;
+            this.timerMode = mode;
+            this.remainingTime = this.durations[mode];
+            this.totalTime = this.durations[mode];
+            this.timerState = 'running';
+            
+            if (this.intervalId) {
+                clearInterval(this.intervalId);
+                this.intervalId = null;
+            }
+            
+            this.startCountdown();
+        },
+        
+        startCountdown() {
+            if (this.intervalId) {
+                clearInterval(this.intervalId);
+            }
+            
+            this.intervalId = setInterval(() => {
+                if (this.remainingTime > 0) {
+                    this.remainingTime--;
+                    // Update tick colors as time decreases
+                    this.updateTickColors();
+                } else {
+                    // Timer completed
+                    this.timerComplete();
+                }
+            }, 1000);
+        },
+        
+        timerComplete() {
+            if (this.intervalId) {
+                clearInterval(this.intervalId);
+                this.intervalId = null;
+            }
+            this.timerState = 'stopped';
+            this.remainingTime = this.durations[this.timerMode];
+            this.totalTime = this.durations[this.timerMode];
+            
+            // You could add a notification or sound here
+            alert('Timer completed!');
+        },
+        
+        // Cleanup when component is destroyed
+        init() {
+            // Clean up interval on page unload
+            window.addEventListener('beforeunload', () => {
+                if (this.intervalId) {
+                    clearInterval(this.intervalId);
+                }
+            });
+            
+            // Watch for theme color changes
+            this.$watch('themeColor', () => {
+                this.updateTickColors();
+            });
+        }
+    }
+}
+</script>
+{{end}}
